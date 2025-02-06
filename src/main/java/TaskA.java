@@ -14,12 +14,12 @@ import java.util.StringTokenizer;
 public class TaskA {
 
     public static class TokenizerMapper
-            extends Mapper<Object, Text, Text, IntWritable>{
+            extends Mapper<Object, Text, Text, IntWritable> {
 
         private final static IntWritable one = new IntWritable(1);
         private Text word = new Text();
 
-       //mAKE LOGIC CHANGE HERE
+        //mAKE LOGIC CHANGE HERE
         public void map(Object key, Text value, Context context
         ) throws IOException, InterruptedException {
             StringTokenizer itr = new StringTokenizer(value.toString());
@@ -30,21 +30,21 @@ public class TaskA {
         }
 
 
-    public static class IntSumReducer
-            extends Reducer<Text,IntWritable,Text,IntWritable> {
-        private IntWritable result = new IntWritable();
+        public static class IntSumReducer
+                extends Reducer<Text, IntWritable, Text, IntWritable> {
+            private IntWritable result = new IntWritable();
 
-        public void reduce(Text key, Iterable<IntWritable> values,
-                           Context context
-        ) throws IOException, InterruptedException {
-            int sum = 0;
-            for (IntWritable val : values) {
-                sum += val.get();
+            public void reduce(Text key, Iterable<IntWritable> values,
+                               Context context
+            ) throws IOException, InterruptedException {
+                int sum = 0;
+                for (IntWritable val : values) {
+                    sum += val.get();
+                }
+                result.set(sum);
+                context.write(key, result);
             }
-            result.set(sum);
-            context.write(key, result);
         }
-    }
 
 //   public void debug(String[] args) throws Exception {
 //        Configuration conf = new Configuration();
@@ -58,19 +58,20 @@ public class TaskA {
 //        FileInputFormat.addInputPath(job, new Path(args[0]));
 //        FileOutputFormat.setOutputPath(job, new Path(args[1]));
 //        System.exit(job.waitForCompletion(true) ? 0 : 1);
-    //}
+        //}
 
-    public static void main(String[] args) throws Exception {
-        Configuration conf = new Configuration();
-        Job job = Job.getInstance(conf, "word count");
-        job.setJarByClass(TaskA.class);
-        job.setMapperClass(TokenizerMapper.class);
-        job.setCombinerClass(IntSumReducer.class);
-        job.setReducerClass(IntSumReducer.class);
-        job.setOutputKeyClass(Text.class);
-        job.setOutputValueClass(IntWritable.class);
-        FileInputFormat.addInputPath(job, new Path("/Users/kennethsmith/Downloads/Big Data Management and Analysis/untitled3/data.txt"));
-        FileOutputFormat.setOutputPath(job, new Path("/Users/kennethsmith/Downloads/Big Data Management and Analysis/untitled3/output"));
-        System.exit(job.waitForCompletion(true) ? 1 : 2);
+        public static void main(String[] args) throws Exception {
+            Configuration conf = new Configuration();
+            Job job = Job.getInstance(conf, "word count");
+            job.setJarByClass(TaskA.class);
+            job.setMapperClass(TokenizerMapper.class);
+            job.setCombinerClass(IntSumReducer.class);
+            job.setReducerClass(IntSumReducer.class);
+            job.setOutputKeyClass(Text.class);
+            job.setOutputValueClass(IntWritable.class);
+            FileInputFormat.addInputPath(job, new Path("/Users/kennethsmith/Downloads/Big Data Management and Analysis/untitled3/data.txt"));
+            FileOutputFormat.setOutputPath(job, new Path("/Users/kennethsmith/Downloads/Big Data Management and Analysis/untitled3/output"));
+            System.exit(job.waitForCompletion(true) ? 1 : 2);
+        }
     }
 }
