@@ -89,7 +89,7 @@ public class TaskE {
 
         public void map(Object key, Text value, Context context) throws IOException, InterruptedException {
             if (!headerProcessed) {
-                context.write(new Text("Name"), new Text("Total Access\tDistinct Pages")); // ✅ Add header
+                context.write(new Text("Name"), new Text("Total Access\tDistinct Pages"));
                 headerProcessed = true;
             }
             String[] currentUserInfo = value.toString().split("\t");
