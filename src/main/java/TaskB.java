@@ -13,162 +13,147 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 import java.net.URI;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.PriorityQueue;
-import java.util.StringTokenizer;
+import java.util.*;
 
 public class TaskB {
 
-    public static class AccessMapper
-            extends Mapper<Object, Text, IntWritable, IntWritable>{
-
-        private IntWritable currentPageId = new IntWritable();
+    public static class PageAccessMapper extends Mapper<Object, Text, IntWritable, IntWritable> {
+        private IntWritable userPageId = new IntWritable();
         private final static IntWritable one = new IntWritable(1);
+        private boolean firstRow = true;
+        public void map(Object key, Text value, Context context) throws IOException, InterruptedException {
+            if (firstRow) {
+                firstRow = false;
+                return;
+            }
 
-        public void map(Object key, Text value, Context context
-        ) throws IOException, InterruptedException {
-            String[] accessInfo = value.toString().split(",");
+            String[] currentPage = value.toString().split(",");
+            if (currentPage.length < 3) return;
 
             try {
-                int currPageVal = Integer.parseInt(accessInfo[2]);
-                currentPageId.set(currPageVal);
-                context.write(currentPageId, one);
+                int currPageVal = Integer.parseInt(currentPage[2].trim());
+                userPageId.set(currPageVal);
+                context.write(userPageId, one);
             } catch (NumberFormatException e) {
-
+                System.err.println("Skipping invalid row: " + value.toString());
             }
-
-
         }
     }
 
-    public static class computePageReducer extends Reducer<IntWritable, IntWritable, IntWritable, IntWritable>{
+    public static class computeCountReducer extends Reducer<IntWritable, IntWritable, IntWritable, IntWritable> {
         public void reduce(IntWritable key, Iterable<IntWritable> values, Context context) throws IOException, InterruptedException {
-            int currentSum = 0;
-            for (IntWritable val : values) {
-                currentSum += val.get();
+            int currSum = 0;
+            for (IntWritable currVal : values) {
+                currSum += currVal.get();
             }
-            context.write(key, new IntWritable(currentSum));
+            context.write(key, new IntWritable(currSum));
         }
     }
 
-    public static class computeTop10 extends Mapper<Object, Text, IntWritable, IntWritable> {
+    public static class computeTopTen extends Mapper<Object, Text, IntWritable, IntWritable> {
         private Map<Integer, Integer> pageToCount = new HashMap<>();
 
         public void map(Object key, Text value, Context context) throws IOException, InterruptedException {
-            String[] pageInfo = value.toString().split("\t");
-            if (pageInfo.length < 2) return ;
+            String[] currPageRow = value.toString().split("\t");
+            if (currPageRow.length < 2) return;
 
-            int currentId = Integer.parseInt(pageInfo[0]);
-            int currentCount = Integer.parseInt(pageInfo[1]);
-            pageToCount.put(currentId, currentCount);
+            int idVal = Integer.parseInt(currPageRow[0]);
+            int countVal = Integer.parseInt(currPageRow[1]);
+            pageToCount.put(idVal, countVal);
         }
 
-        public void cleanup(Context context) throws IOException, InterruptedException {
-            PriorityQueue<Map.Entry<Integer, Integer>> topTenPages = new PriorityQueue<>((a, b) -> b.getValue() - a.getValue());
-            topTenPages.addAll(pageToCount.entrySet());
-            int currentCount = 0;
-            while (!topTenPages.isEmpty() && currentCount < 10) {
-                Map.Entry<Integer, Integer> currentPage = topTenPages.poll();
+        protected void cleanup(Context context) throws IOException, InterruptedException {
+            PriorityQueue<Map.Entry<Integer, Integer>> topTenPage = new PriorityQueue<>((a, b) -> b.getValue() - a.getValue());
+            topTenPage.addAll(pageToCount.entrySet());
+
+            int currentCountValue = 0;
+            while (!topTenPage.isEmpty() && currentCountValue < 10) {
+                Map.Entry<Integer, Integer> currentPage = topTenPage.poll();
                 context.write(new IntWritable(currentPage.getKey()), new IntWritable(currentPage.getValue()));
-                currentCount++;
+                currentCountValue++;
             }
         }
     }
 
-    public static class computeJoinReducer extends Reducer<IntWritable, IntWritable, Text, Text>{
+
+    public static class computeJoinMap extends Mapper<Object, Text, Text, Text> {
         private Map<Integer, String[]> idToInfo = new HashMap<>();
 
         public void setup(Context context) throws IOException {
-            System.out.println("Running setup()...");  // This should always print
-            URI[] cacheFile = context.getCacheFiles();
-            if (cacheFile == null || cacheFile.length == 0) {
-                System.out.println("No cache file found;");
-                return;
+            URI[] cacheFiles = context.getCacheFiles();
+            if (cacheFiles == null || cacheFiles.length == 0) {
+                throw new IOException("No cache files found!");
             }
-            System.out.println("Cache files found: " + cacheFile.length);  // Debugging output
-
-
-            for (URI currFile : cacheFile) {
-                try(BufferedReader reader = new BufferedReader(new FileReader(new File(currFile)))) {
+            for (URI currFile : cacheFiles) {
+                File file = new File(currFile.getPath());
+                try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
                     String currLine;
+                    currLine = reader.readLine();
                     while ((currLine = reader.readLine()) != null) {
                         String[] currentUserInfo = currLine.split(",");
                         if (currentUserInfo.length < 3) continue;
                         int userPageId = Integer.parseInt(currentUserInfo[0]);
                         String userName = currentUserInfo[1];
                         String userNationality = currentUserInfo[2];
-
                         idToInfo.put(userPageId, new String[]{userName, userNationality});
                     }
                 }
             }
-            System.out.println("Loaded " + idToInfo.size() + " records from pages.csv"); // Debugging
-
         }
 
-        public void reduce(IntWritable key, Iterable<IntWritable> values, Context context) throws IOException, InterruptedException {
-            String[] currentInfo = idToInfo.get(key.get());
-            context.write(new Text(key.toString()), new Text(currentInfo[0] + "\t" + currentInfo[1]));
+        public void map(Object key, Text value, Context context) throws IOException, InterruptedException {
+            String[] currentPageInfo = value.toString().split("\t");
+            if (currentPageInfo.length < 2) return;
+
+            int pageID = Integer.parseInt(currentPageInfo[0]);
+            String[] pageInfo = idToInfo.getOrDefault(pageID, new String[]{"Unknown", "Unknown"});
+
+            context.write(new Text(currentPageInfo[0]), new Text(pageInfo[0] + "\t" + pageInfo[1]));
         }
     }
 
-
-
-//    public void debug(String[] args) throws Exception {
-//        Configuration conf = new Configuration();
-//        Job job = Job.getInstance(conf, "word count");
-//        job.setJarByClass(TaskB.class);
-//        job.setMapperClass(TokenizerMapper.class);
-//        job.setCombinerClass(IntSumReducer.class);
-//        job.setReducerClass(IntSumReducer.class);
-//        job.setOutputKeyClass(Text.class);
-//        job.setOutputValueClass(IntWritable.class);
-//        FileInputFormat.addInputPath(job, new Path(args[0]));
-//        FileOutputFormat.setOutputPath(job, new Path(args[1]));
-//        System.exit(job.waitForCompletion(true) ? 0 : 1);
-//    }
+    
 
     public static void main(String[] args) throws Exception {
         Configuration conf = new Configuration();
 
-        Job job1 = Job.getInstance(conf, "first job");
-        job1.setJarByClass(TaskB.class);
-        job1.setMapperClass(AccessMapper.class);
-        job1.setReducerClass(computePageReducer.class);
-        job1.setOutputKeyClass(IntWritable.class);
-        job1.setOutputValueClass(IntWritable.class);
-        FileInputFormat.addInputPath(job1, new Path("C:/Users/wpiguest/Desktop/projet1/CS4433-Project-1/access_logs.csv"));
-        FileOutputFormat.setOutputPath(job1, new Path("C:/Users/wpiguest/Desktop/projet1/CS4433-Project-1/output/task_b_compute_count"));
+        Job firstJob = Job.getInstance(conf, "Count Page Computation");
+        firstJob.setJarByClass(TaskB.class);
+        firstJob.setMapperClass(PageAccessMapper.class);
+        firstJob.setReducerClass(computeCountReducer.class);
+        firstJob.setOutputKeyClass(IntWritable.class);
+        firstJob.setOutputValueClass(IntWritable.class);
+        FileInputFormat.addInputPath(firstJob, new Path("C:/Users/wpiguest/Desktop/projet1/CS4433-Project-1/access_logs.csv"));
+        FileOutputFormat.setOutputPath(firstJob, new Path("C:/Users/wpiguest/Desktop/projet1/CS4433-Project-1/output/task_b_compute_count"));
 
-        if (!job1.waitForCompletion(true)) {
+        if (!firstJob.waitForCompletion(true)) {
             System.exit(1);
         }
 
-        Job job2 = Job.getInstance(conf, "Compute top 10");
-        job2.setJarByClass(TaskB.class);
-        job2.setMapperClass(computeTop10.class);
-        job2.setReducerClass(Reducer.class); // Identity reducer
-        job2.setOutputKeyClass(IntWritable.class);
-        job2.setOutputValueClass(IntWritable.class);
-        FileInputFormat.addInputPath(job2, new Path("C:/Users/wpiguest/Desktop/projet1/CS4433-Project-1/output/task_b_compute_count"));
-        FileOutputFormat.setOutputPath(job2, new Path("C:/Users/wpiguest/Desktop/projet1/CS4433-Project-1/output/task_b_compute_top_10"));
+        Job secondJob = Job.getInstance(conf, "Compute Top 10 Pages");
+        secondJob.setJarByClass(TaskB.class);
+        secondJob.setMapperClass(computeTopTen.class);
+        secondJob.setReducerClass(Reducer.class); // Identity Reducer
+        secondJob.setOutputKeyClass(IntWritable.class);
+        secondJob.setOutputValueClass(IntWritable.class);
+        FileInputFormat.addInputPath(secondJob, new Path("C:/Users/wpiguest/Desktop/projet1/CS4433-Project-1/output/task_b_compute_count"));
+        FileOutputFormat.setOutputPath(secondJob, new Path("C:/Users/wpiguest/Desktop/projet1/CS4433-Project-1/output/task_b_compute_top_10"));
 
-        if (!job2.waitForCompletion(true)) {
+        if (!secondJob.waitForCompletion(true)) {
             System.exit(1);
         }
 
+        Job thirdJob = Job.getInstance(conf, "Join Mypage Table Computation");
+        thirdJob.setJarByClass(TaskB.class);
+        thirdJob.addCacheFile(new URI("file:///C:/Users/wpiguest/Desktop/projet1/CS4433-Project-1/pages.csv"));
+        thirdJob.setMapperClass(computeJoinMap.class);
+        thirdJob.setNumReduceTasks(0); // ✅ Map-Only Job
+        thirdJob.setOutputKeyClass(Text.class);
+        thirdJob.setOutputValueClass(Text.class);
+        FileInputFormat.addInputPath(thirdJob, new Path("C:/Users/wpiguest/Desktop/projet1/CS4433-Project-1/output/task_b_compute_top_10"));
+        FileOutputFormat.setOutputPath(thirdJob, new Path("C:/Users/wpiguest/Desktop/projet1/CS4433-Project-1/output/task_b_final_computation"));
 
-        Job job3 = Job.getInstance(conf, "Join Mypage Table");
-        job3.setJarByClass(TaskB.class);
-        job3.addCacheFile(new URI("file:///C:/Users/wpiguest/Desktop/projet1/CS4433-Project-1/pages.csv"));
-        job3.setMapperClass(Mapper.class);
-        job3.setReducerClass(computeJoinReducer.class);
-        job3.setOutputKeyClass(Text.class);
-        job3.setOutputValueClass(Text.class);
-        FileInputFormat.addInputPath(job3, new Path("C:/Users/wpiguest/Desktop/projet1/CS4433-Project-1/output/task_b_compute_top_10"));
-        FileOutputFormat.setOutputPath(job3, new Path("C:/Users/wpiguest/Desktop/projet1/CS4433-Project-1/output/task_b_final_computation"));
-
-        System.exit(job3.waitForCompletion(true) ? 0 : 1);
+        System.exit(thirdJob.waitForCompletion(true) ? 0 : 1);
     }
+
 }

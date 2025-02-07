@@ -19,7 +19,6 @@ public class TaskA {
 
         public static final String NATIONALITY_INPUT = "United States";
 
-        //mAKE LOGIC CHANGE HERE
         public void map(Object key, Text value, Context context
         ) throws IOException, InterruptedException {
             String[] userInput = value.toString().split(",");
