@@ -66,8 +66,8 @@ public class TaskH {
         job.setReducerClass(PopularReducer.class);
         job.setOutputKeyClass(Text.class);
         job.setOutputValueClass(IntWritable.class);
-        FileInputFormat.addInputPath(job, new Path("C:\\Users\\ashto\\IdeaProjects\\CS4433-Project-1\\friends.csv"));
-        FileOutputFormat.setOutputPath(job, new Path("C:\\Users\\ashto\\IdeaProjects\\CS4433-Project-1\\output_taskh"));
+        FileInputFormat.addInputPath(job, new Path("C:/Users/wpiguest/Desktop/projet1/CS4433-Project-1/friends.csv"));
+        FileOutputFormat.setOutputPath(job, new Path("C:/Users/wpiguest/Desktop/projet1/CS4433-Project-1/output/task_h_final_output"));
         System.exit(job.waitForCompletion(true) ? 0 : 1);
     }
 }
